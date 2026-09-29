@@ -48,7 +48,7 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
-                  - name: Create local.properties
+      - name: Create local.properties
         run: |
           cat <<EOF > local.properties
           POSTHOG_API_KEY=dummy
