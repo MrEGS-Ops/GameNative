@@ -48,6 +48,13 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
+                  - name: Create local.properties
+        run: |
+          cat <<EOF > local.properties
+          POSTHOG_API_KEY=dummy
+          POSTHOG_HOST=https://us.i.posthog.com
+          EOF
+
       - name: Build Legacy XR Quest bundle
         run: ./gradlew :app:bundleLegacyXrRelease
 
