@@ -110,7 +110,9 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             android.util.SparseArray<Drawable> sa = xServer.drawableManager.all(); // adjust type if needed
             for (int i = 0; i < sa.size(); i++) {
                 Drawable d = sa.valueAt(i);
-                if (d != null) d.getTexture().invalidate(); // sets textureId=0 so next draw re-creates
+                if (d != null && d.getTexture() != null) {
+    d.getTexture().invalidate();
+} // sets textureId=0 so next draw re-creates
             }
             rootCursorDrawable.getTexture().invalidate();
         }
