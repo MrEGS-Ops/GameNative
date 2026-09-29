@@ -169,10 +169,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
-        }
+    isMinifyEnabled = true
+    isShrinkResources = true
+    signingConfig = signingConfigs.getByName("debug")
+    applicationIdSuffix = ".doomtest"
+}
         create("release-signed") {
             isMinifyEnabled = true
             isShrinkResources = true
