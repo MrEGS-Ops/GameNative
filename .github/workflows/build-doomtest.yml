@@ -1,0 +1,71 @@
+name: Build DOOM Test APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      - name: Install Android SDK Build Tools
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          yes | "$SDKMANAGER" --install "build-tools;34.0.0"
+
+      - name: Create test signing key
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair \
+            -keystore ~/.android/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build Legacy XR Quest bundle
+        run: ./gradlew :app:bundleLegacyXrRelease
+
+      - name: Create universal Quest APK
+        run: |
+          java -Xmx3g -jar tools/bundletool-all-1.17.2.jar build-apks \
+            --bundle=app/build/outputs/bundle/legacyXrRelease/app-legacyXr-release.aab \
+            --output=doomtest.apks \
+            --mode=universal \
+            --ks=$HOME/.android/debug.keystore \
+            --ks-pass=pass:android \
+            --ks-key-alias=androiddebugkey \
+            --key-pass=pass:android
+
+          unzip -p doomtest.apks universal.apk > GameNative-DOOM-Test.apk
+
+      - name: Upload patched APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameNative-DOOM-Test
+          path: GameNative-DOOM-Test.apk
