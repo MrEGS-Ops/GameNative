@@ -172,11 +172,15 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
-    isMinifyEnabled = true
-    isShrinkResources = true
-    signingConfig = signingConfigs.getByName("debug")
-    applicationIdSuffix = ".doomtest"
-}
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = if (keystoreProperties != null) {
+                signingConfigs.getByName("pluvia")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+            applicationIdSuffix = ".doomtest"
+        }
         create("release-signed") {
             isMinifyEnabled = true
             isShrinkResources = true
