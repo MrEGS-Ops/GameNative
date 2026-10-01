@@ -66,6 +66,13 @@ jobs:
           mkdir -p app/keystores
           echo "$KEYSTORE_BASE64" | base64 --decode > app/keystores/doom-release.jks
 
+          cat > app/keystores/keystore.properties <<EOF
+          storeFile=keystores/doom-release.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
       - name: Create local.properties
         run: |
           cat > local.properties <<EOF
