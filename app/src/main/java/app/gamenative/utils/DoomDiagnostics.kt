@@ -35,15 +35,13 @@ object DoomDiagnostics {
     private var writer: BufferedWriter? = null
     private var sampler: Job? = null
     private var currentFile: File? = null
-    private var appContext: Context? = null
+    private var logcatProcess: java.lang.Process? = null
 
     private fun stamp(): String =
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
 
     fun start(context: Context, appId: String) {
         stop("starting-new-session")
-        appContext = context.applicationContext
-
         DoomLogStorage.ensureDirectories()
         val dir = DoomLogStorage.diagnosticLogs
         val current = File(dir, "doom_session_current.txt")
@@ -63,6 +61,8 @@ object DoomDiagnostics {
         current.delete()
         currentFile = current
         writer = BufferedWriter(FileWriter(current, false))
+
+        startSystemLogcat(dir)
 
         event("===== DOOM SESSION START =====")
         event("AppId=$appId")
@@ -146,6 +146,9 @@ object DoomDiagnostics {
         sampler?.cancel()
         sampler = null
 
+        runCatching { logcatProcess?.destroy() }
+        logcatProcess = null
+
         synchronized(lock) {
             runCatching {
                 writer?.apply {
@@ -159,6 +162,34 @@ object DoomDiagnostics {
     }
 
     fun currentFile(): File? = currentFile
+
+    private fun startSystemLogcat(dir: File) {
+        runCatching { logcatProcess?.destroy() }
+        logcatProcess = null
+
+        val current = File(dir, "doom_system_current.log")
+        val previous = File(dir, "doom_system_previous.log")
+
+        if (current.exists()) {
+            runCatching { current.copyTo(previous, overwrite = true) }
+            current.delete()
+        }
+
+        runCatching {
+            logcatProcess = ProcessBuilder(
+                "logcat",
+                "-b",
+                "all",
+                "-v",
+                "threadtime",
+            )
+                .redirectOutput(current)
+                .redirectErrorStream(true)
+                .start()
+        }.onFailure {
+            event("SYSTEM logcat start failed: ${it.javaClass.simpleName}: ${it.message}")
+        }
+    }
 
     private fun pruneArchives(dir: File) {
         val archives = dir.listFiles()
