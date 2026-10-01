@@ -1,0 +1,154 @@
+name: Release GameNative DOOM
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Version name, e.g. 1.0.0"
+        required: true
+        default: "1.0.0"
+      version_code:
+        description: "Android version code, e.g. 1000"
+        required: true
+        default: "1000"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      DOOM_VERSION_NAME: ${{ inputs.version_name }}
+      DOOM_VERSION_CODE: ${{ inputs.version_code }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      - name: Install Android SDK Build Tools
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          yes | "$SDKMANAGER" --install "build-tools;34.0.0"
+
+      - name: Restore permanent signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DOOM_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.DOOM_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.DOOM_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.DOOM_STORE_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "DOOM_KEYSTORE_BASE64 is missing"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "DOOM_KEY_ALIAS is missing"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "DOOM_KEY_PASSWORD is missing"; exit 1; }
+          test -n "$STORE_PASSWORD" || { echo "DOOM_STORE_PASSWORD is missing"; exit 1; }
+
+          mkdir -p app/keystores
+          echo "$KEYSTORE_BASE64" | base64 --decode > app/keystores/doom-release.jks
+
+      - name: Create local.properties
+        run: |
+          cat > local.properties <<EOF
+          POSTHOG_API_KEY=dummy
+          POSTHOG_HOST=https://us.i.posthog.com
+          STEAMGRIDDB_API_KEY=
+          CLOUD_PROJECT_NUMBER=
+          EOF
+
+      - name: Build Legacy XR release bundle
+        run: ./gradlew :app:bundleLegacyXrRelease
+
+      - name: Build permanently signed universal Quest APK
+        env:
+          KEY_ALIAS: ${{ secrets.DOOM_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.DOOM_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.DOOM_STORE_PASSWORD }}
+        run: |
+          java -Xmx3g -jar tools/bundletool-all-1.17.2.jar build-apks \
+            --bundle=app/build/outputs/bundle/legacyXrRelease/app-legacyXr-release.aab \
+            --output=doom-release.apks \
+            --mode=universal \
+            --ks=app/keystores/doom-release.jks \
+            --ks-pass=pass:"$STORE_PASSWORD" \
+            --ks-key-alias="$KEY_ALIAS" \
+            --key-pass=pass:"$KEY_PASSWORD"
+
+          unzip -p doom-release.apks universal.apk > GameNative-DOOM.apk
+
+      - name: Verify package and signing certificate
+        run: |
+          AAPT_DIR="$ANDROID_HOME/build-tools/34.0.0"
+          if [ ! -d "$AAPT_DIR" ]; then
+            AAPT_DIR="$ANDROID_SDK_ROOT/build-tools/34.0.0"
+          fi
+
+          "$AAPT_DIR/aapt" dump badging GameNative-DOOM.apk | head -n 5
+          "$AAPT_DIR/apksigner" verify --verbose --print-certs GameNative-DOOM.apk
+
+          PACKAGE=$("$AAPT_DIR/aapt" dump badging GameNative-DOOM.apk | sed -n "s/package: name='\([^']*\)'.*/\1/p")
+          test "$PACKAGE" = "app.gamenative.doomtest" || {
+            echo "Unexpected package: $PACKAGE"
+            exit 1
+          }
+
+      - name: Generate update manifest
+        run: |
+          SHA256=$(sha256sum GameNative-DOOM.apk | awk '{print $1}')
+
+          cat > update.json <<EOF
+          {
+            "versionName": "${DOOM_VERSION_NAME}",
+            "versionCode": ${DOOM_VERSION_CODE},
+            "packageName": "app.gamenative.doomtest",
+            "apkAsset": "GameNative-DOOM.apk",
+            "sha256": "${SHA256}"
+          }
+          EOF
+
+          cat update.json
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameNative-DOOM-${{ inputs.version_name }}
+          path: |
+            GameNative-DOOM.apk
+            update.json
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="doom-v${DOOM_VERSION_NAME}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            exit 1
+          fi
+
+          gh release create "$TAG" \
+            GameNative-DOOM.apk \
+            update.json \
+            --target "$GITHUB_SHA" \
+            --title "GameNative DOOM ${DOOM_VERSION_NAME}" \
+            --notes "Quest standalone DOOM build ${DOOM_VERSION_NAME}. Includes persistent Downloads diagnostics and in-app GitHub updates."
