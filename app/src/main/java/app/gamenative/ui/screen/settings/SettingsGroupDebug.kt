@@ -188,6 +188,26 @@ fun SettingsGroupDebug() {
     var updateStatus by rememberSaveable {
         mutableStateOf("Installed ${BuildConfig.VERSION_NAME}")
     }
+    var showDiagnosticLogDialog by rememberSaveable { mutableStateOf(false) }
+    var diagnosticLogFile: File? by rememberSaveable { mutableStateOf(null) }
+
+    if (showDiagnosticLogDialog && diagnosticLogFile != null) {
+        val diagnosticText by produceState("Loading...", diagnosticLogFile) {
+            value = withContext(Dispatchers.IO) { readTail(diagnosticLogFile) }
+        }
+        CrashLogDialog(
+            visible = true,
+            fileName = diagnosticLogFile?.name ?: "DOOM diagnostics",
+            fileText = diagnosticText,
+            onSave = {
+                SnackbarManager.show(
+                    "Already saved in Downloads/GameNative-DOOM/Logs/Diagnostics",
+                )
+            },
+            onDismissRequest = { showDiagnosticLogDialog = false },
+        )
+    }
+
 
     fun checkForUpdate() {
         scope.launch {
@@ -244,6 +264,41 @@ fun SettingsGroupDebug() {
             onClick = {
                 DoomLogStorage.ensureDirectories()
                 SnackbarManager.show("Logs are saved in Downloads/GameNative-DOOM/Logs")
+            },
+        )
+
+        SettingsMenuLink(
+            colors = settingsTileColors(),
+            title = { Text(text = "View current DOOM diagnostics") },
+            subtitle = { Text(text = "Live session log in Downloads") },
+            onClick = {
+                DoomLogStorage.ensureDirectories()
+                diagnosticLogFile = File(
+                    DoomLogStorage.diagnosticLogs,
+                    "doom_session_current.txt",
+                ).takeIf { it.exists() }
+                if (diagnosticLogFile != null) {
+                    showDiagnosticLogDialog = true
+                } else {
+                    SnackbarManager.show("No current DOOM diagnostic log found")
+                }
+            },
+        )
+        SettingsMenuLink(
+            colors = settingsTileColors(),
+            title = { Text(text = "View previous DOOM diagnostics") },
+            subtitle = { Text(text = "Previous session survives a crash/restart") },
+            onClick = {
+                DoomLogStorage.ensureDirectories()
+                diagnosticLogFile = File(
+                    DoomLogStorage.diagnosticLogs,
+                    "doom_session_previous.txt",
+                ).takeIf { it.exists() }
+                if (diagnosticLogFile != null) {
+                    showDiagnosticLogDialog = true
+                } else {
+                    SnackbarManager.show("No previous DOOM diagnostic log found")
+                }
             },
         )
         // Link to open channel selector
