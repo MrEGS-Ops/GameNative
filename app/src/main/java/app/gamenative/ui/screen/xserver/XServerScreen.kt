@@ -134,6 +134,8 @@ import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.downloader.CoreDriverDownloader
 import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.DebugReportUtils
+import app.gamenative.utils.DoomDiagnostics
+import app.gamenative.utils.DoomLogStorage
 import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.LsfgQuickMenuHelper
 import app.gamenative.utils.LsfgVkManager
@@ -3999,6 +4001,14 @@ private fun setupXEnvironment(
     val enableWineDebug = PrefManager.enableWineDebug
     val enableBox86Logs = WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)
     val wineDebugChannels = PrefManager.wineDebugChannels
+    if (appId == "379720") {
+        DoomDiagnostics.start(context, appId)
+        DoomDiagnostics.event("DOOM launch requested")
+        DoomDiagnostics.event("WineDebugEnabled=$enableWineDebug")
+        DoomDiagnostics.event("WineDebugChannels=$wineDebugChannels")
+        DoomDiagnostics.event("DebugRun=$debugRun")
+        DoomDiagnostics.event("DiagnosticsMode=$diagnostics")
+    }
     // explicitly enable or disable Wine debug channels
     if (debugRun) {
         envVars.put("WINEDEBUG", "warn+seh,+loaddll,+process,+timestamp,+pid,+tid")
@@ -4021,14 +4031,19 @@ private fun setupXEnvironment(
                 "-all",
         )
     }
+    if (appId == "379720") {
+        DoomDiagnostics.event("WINEDEBUG=${envVars.get("WINEDEBUG")}")
+    }
+
     // capture debug output to file if either Wine or Box86/64 logging is enabled
     var logFile: File? = null
     val captureLogs = debugRun || enableWineDebug || enableBox86Logs
     if (captureLogs) {
-        val wineLogDir = File(context.getExternalFilesDir(null), "wine_logs")
-        wineLogDir.mkdirs()
-        logFile = File(wineLogDir, if (debugRun) "debug_run_$appId.log" else "wine_debug.log")
-        if (logFile.exists()) logFile.delete()
+        DoomLogStorage.ensureDirectories()
+        logFile = DoomLogStorage.newWineLog(appId = appId, debugRun = debugRun)
+        if (appId == "379720") {
+            DoomDiagnostics.event("WineLog=${logFile.absolutePath}")
+        }
         if (debugRun) DebugReportUtils.startLogcatCapture(context, appId)
     }
 
