@@ -4040,7 +4040,12 @@ private fun setupXEnvironment(
     val captureLogs = debugRun || enableWineDebug || enableBox86Logs
     if (captureLogs) {
         DoomLogStorage.ensureDirectories()
-        logFile = DoomLogStorage.newWineLog(appId = appId, debugRun = debugRun)
+        logFile = if (debugRun) {
+            DebugReportUtils.wineLogFile(context, appId)
+        } else {
+            DoomLogStorage.newWineLog(appId = appId, debugRun = false)
+        }
+        if (logFile.exists()) logFile.delete()
         if (appId == "379720") {
             DoomDiagnostics.event("WineLog=${logFile.absolutePath}")
         }
