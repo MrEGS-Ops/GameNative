@@ -3959,6 +3959,14 @@ private fun setupXEnvironment(
 ): XEnvironment {
     ProcessHelper.hardKillStaleWineProcesses()
 
+    if (appId == "379720") {
+        DoomDiagnostics.event("setupXEnvironment begin")
+        DoomDiagnostics.event(
+            "Container screen=${container?.screenSize} graphics=${container?.graphicsDriver} " +
+                "wine=${container?.wineVersion} fex=${container?.fexCorePreset}",
+        )
+    }
+
     val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
     val lc_all = container!!.lC_ALL
     val imageFs = ImageFs.find(context)
@@ -4272,6 +4280,9 @@ private fun setupXEnvironment(
     guestProgramLauncherComponent.envVars = EnvVars().apply { putAll(envVars) }
 
     val gameTerminationCallback = Callback<Int> { status ->
+        if (appId == "379720") {
+            DoomDiagnostics.event("Guest program terminated status=$status")
+        }
         if (status != 0) {
             Timber.e("Guest program terminated with status: $status")
             onGameLaunchError?.invoke("Game terminated with error status: $status")
@@ -4385,8 +4396,14 @@ private fun setupXEnvironment(
     }
 
     try {
+        if (appId == "379720") {
+            DoomDiagnostics.event("Starting X/Wine environment components")
+        }
         immersiveHooks?.windowsVr?.beforeGuestProcessStart()
         environment.startEnvironmentComponents()
+        if (appId == "379720") {
+            DoomDiagnostics.event("X/Wine environment components started")
+        }
         immersiveHooks?.windowsVr?.onEnvironmentStarted()
         if (container != null && !bootToContainer) {
             CoroutineScope(Dispatchers.IO).launch { GameFileDetection.ensure(context, container) }
