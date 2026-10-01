@@ -1,6 +1,7 @@
 package app.gamenative
 
 import android.content.Context
+import app.gamenative.utils.DoomLogStorage
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -22,7 +23,7 @@ class CrashHandler(
 
     companion object {
         private const val LOG_CAT_COUNT = 256
-        private const val CRASH_FILE_HISTORY_COUNT = 1
+        private const val CRASH_FILE_HISTORY_COUNT = 20
 
         val timestamp: String
             get() = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())
@@ -67,9 +68,8 @@ class CrashHandler(
     }
 
     private val crashFileDir by lazy {
-        File(context.getExternalFilesDir(null), "crash_logs").apply {
-            if (!exists()) mkdirs()
-        }
+        DoomLogStorage.ensureDirectories()
+        DoomLogStorage.crashLogs
     }
 
     private val recentLogcat: String
