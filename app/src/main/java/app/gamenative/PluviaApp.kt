@@ -20,6 +20,7 @@ import app.gamenative.service.SteamService
 import app.gamenative.sync.FrontendSyncManager
 import app.gamenative.ui.screen.xserver.RadialMenuCoordinator
 import app.gamenative.utils.ContainerMigrator
+import app.gamenative.utils.DoomDiagnostics
 import app.gamenative.utils.DeviceInfo
 import app.gamenative.utils.IntentLaunchManager
 import app.gamenative.utils.PlayIntegrity
@@ -57,6 +58,16 @@ class PluviaApp : SplitCompatApplication() {
     @Inject lateinit var amazonGameDao: AmazonGameDao
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        DoomDiagnostics.onTrimMemory(level)
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        DoomDiagnostics.onLowMemory()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -270,6 +281,8 @@ class PluviaApp : SplitCompatApplication() {
          * MainActivity.onDestroy fallback so both paths clean up identically
          */
         fun shutdownEnvironment() {
+            DoomDiagnostics.event("shutdownEnvironment called")
+            DoomDiagnostics.stop("GameNative environment shutdown")
             val env = xEnvironment
             Timber.i("shutdownEnvironment: env=%s", env != null)
 
