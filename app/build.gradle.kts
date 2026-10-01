@@ -27,8 +27,8 @@ val posthogHost: String = project.findProperty("POSTHOG_HOST") as String? ?: Sys
 val metaAppId: String = project.findProperty("META_APP_ID") as String? ?: System.getenv("META_APP_ID") ?: ""
 val productSku: String = project.findProperty("PRODUCT_SKU") as String? ?: System.getenv("PRODUCT_SKU") ?: ""
 
-val doomVersionCode = (System.getenv("DOOM_VERSION_CODE") ?: "1000").toInt()
-val doomVersionName = System.getenv("DOOM_VERSION_NAME") ?: "1.0.0"
+val doomVersionCode = (System.getenv("DOOM_VERSION_CODE") ?: "23").toInt()
+val doomVersionName = System.getenv("DOOM_VERSION_NAME") ?: "1.2.1"
 
 room {
     schemaDirectory("$projectDir/schemas")
