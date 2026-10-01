@@ -12,12 +12,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
+import app.gamenative.BuildConfig
 import app.gamenative.CrashHandler
 import coil.annotation.ExperimentalCoilApi
 import coil.imageLoader
@@ -39,12 +41,16 @@ import java.io.File
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import app.gamenative.ui.component.dialog.WineDebugChannelsDialog
+import app.gamenative.utils.DoomLogStorage
+import app.gamenative.utils.UpdateManager
+import kotlinx.coroutines.launch
 
 @Suppress("UnnecessaryOptInAnnotation") // ExperimentalFoundationApi
 @OptIn(ExperimentalCoilApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun SettingsGroupDebug() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val isPreview = LocalInspectionMode.current
     if (!isPreview) {
         PrefManager.init(context)
@@ -89,8 +95,8 @@ fun SettingsGroupDebug() {
     ) }
     var latestCrashFile: File? by rememberSaveable { mutableStateOf(null) }
     LaunchedEffect(Unit) {
-        val crashDir = File(context.getExternalFilesDir(null), "crash_logs")
-        latestCrashFile = crashDir.listFiles()
+        DoomLogStorage.ensureDirectories()
+        latestCrashFile = DoomLogStorage.crashLogs.listFiles()
             ?.filter { it.name.startsWith("pluvia_crash_") }
             ?.maxByOrNull { it.lastModified() }
     }
@@ -112,19 +118,21 @@ fun SettingsGroupDebug() {
         }
     }
 
-    /* Save log cat */
-    val saveLogCat = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain"),
-    ) { resultUri ->
-        try {
-            resultUri?.let {
-                val logs = CrashHandler.getAppLogs(1000)
-                context.contentResolver.openOutputStream(resultUri)?.use { outputStream ->
-                    outputStream.write(logs.toByteArray())
+    /* Save app log directly to public Downloads. */
+    fun saveLogCatDirectly() {
+        scope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    DoomLogStorage.saveAppLog(CrashHandler.getAppLogs(5000))
                 }
+                SnackbarManager.show(
+                    "Saved to Downloads/GameNative-DOOM/Logs/App/${file.name}",
+                )
+            } catch (e: Exception) {
+                SnackbarManager.show(
+                    "Failed to save app log: ${e.message ?: e.javaClass.simpleName}",
+                )
             }
-        } catch (e: Exception) {
-            SnackbarManager.show(context.getString(R.string.toast_failed_log_save))
         }
     }
 
@@ -145,10 +153,10 @@ fun SettingsGroupDebug() {
     var showWineLogDialog by rememberSaveable { mutableStateOf(false) }
     var latestWineLogFile: File? by rememberSaveable { mutableStateOf(null) }
     LaunchedEffect(Unit) {
-        val wineLogDir = File(context.getExternalFilesDir(null), "wine_logs")
-        wineLogDir.mkdirs()
-        val wineLogFile = File(wineLogDir, "wine_debug.log")
-        latestWineLogFile = if (wineLogFile.exists()) wineLogFile else null
+        DoomLogStorage.ensureDirectories()
+        latestWineLogFile = DoomLogStorage.wineLogs.listFiles()
+            ?.filter { it.isFile }
+            ?.maxByOrNull { it.lastModified() }
     }
     val saveWineLogContract = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/plain"),
@@ -177,12 +185,66 @@ fun SettingsGroupDebug() {
         )
     }
 
+    var updateStatus by rememberSaveable {
+        mutableStateOf("Installed ${BuildConfig.VERSION_NAME}")
+    }
+
+    fun checkForUpdate() {
+        scope.launch {
+            try {
+                updateStatus = "Checking GitHub..."
+                val update = withContext(Dispatchers.IO) {
+                    UpdateManager.checkForUpdate()
+                }
+
+                if (update == null) {
+                    updateStatus = "Latest version installed"
+                    SnackbarManager.show("GameNative DOOM is up to date")
+                    return@launch
+                }
+
+                updateStatus = "Downloading ${update.versionName}..."
+                val apk = withContext(Dispatchers.IO) {
+                    UpdateManager.downloadAndVerify(context, update)
+                }
+                updateStatus = "Downloaded ${update.versionName}"
+
+                if (UpdateManager.ensureInstallPermission(context)) {
+                    UpdateManager.launchInstaller(context, apk)
+                } else {
+                    updateStatus = "Allow installs from this source, then check again"
+                }
+            } catch (e: Exception) {
+                updateStatus = "Update failed"
+                SnackbarManager.show(
+                    "Update failed: ${e.message ?: e.javaClass.simpleName}",
+                )
+            }
+        }
+    }
+
     SettingsGroup() {
         SettingsMenuLink(
             colors = settingsTileColors(),
             title = { Text(text = stringResource(R.string.settings_save_logcat_title)) },
             subtitle = { Text(text = stringResource(R.string.settings_save_logcat_subtitle)) },
-            onClick = { saveLogCat.launch("app_logs_${CrashHandler.timestamp}.txt") },
+            onClick = { saveLogCatDirectly() },
+        )
+
+        SettingsMenuLink(
+            colors = settingsTileColors(),
+            title = { Text(text = "Check for updates") },
+            subtitle = { Text(text = updateStatus) },
+            onClick = { checkForUpdate() },
+        )
+        SettingsMenuLink(
+            colors = settingsTileColors(),
+            title = { Text(text = "Log folder") },
+            subtitle = { Text(text = "Downloads/GameNative-DOOM/Logs") },
+            onClick = {
+                DoomLogStorage.ensureDirectories()
+                SnackbarManager.show("Logs are saved in Downloads/GameNative-DOOM/Logs")
+            },
         )
         // Link to open channel selector
         SettingsMenuLink(
