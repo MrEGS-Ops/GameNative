@@ -134,6 +134,8 @@ import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.downloader.CoreDriverDownloader
 import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.DebugReportUtils
+import app.gamenative.utils.DoomDiagnostics
+import app.gamenative.utils.DoomLogStorage
 import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.LsfgQuickMenuHelper
 import app.gamenative.utils.LsfgVkManager
@@ -3957,6 +3959,14 @@ private fun setupXEnvironment(
 ): XEnvironment {
     ProcessHelper.hardKillStaleWineProcesses()
 
+    if (appId == "379720") {
+        DoomDiagnostics.event("setupXEnvironment begin")
+        DoomDiagnostics.event(
+            "Container screen=${container?.screenSize} graphics=${container?.graphicsDriver} " +
+                "wine=${container?.wineVersion} fex=${container?.fexCorePreset}",
+        )
+    }
+
     val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
     val lc_all = container!!.lC_ALL
     val imageFs = ImageFs.find(context)
@@ -3999,6 +4009,14 @@ private fun setupXEnvironment(
     val enableWineDebug = PrefManager.enableWineDebug
     val enableBox86Logs = WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)
     val wineDebugChannels = PrefManager.wineDebugChannels
+    if (appId == "379720") {
+        DoomDiagnostics.start(context, appId)
+        DoomDiagnostics.event("DOOM launch requested")
+        DoomDiagnostics.event("WineDebugEnabled=$enableWineDebug")
+        DoomDiagnostics.event("WineDebugChannels=$wineDebugChannels")
+        DoomDiagnostics.event("DebugRun=$debugRun")
+        DoomDiagnostics.event("DiagnosticsMode=$diagnostics")
+    }
     // explicitly enable or disable Wine debug channels
     if (debugRun) {
         envVars.put("WINEDEBUG", "warn+seh,+loaddll,+process,+timestamp,+pid,+tid")
@@ -4021,14 +4039,24 @@ private fun setupXEnvironment(
                 "-all",
         )
     }
+    if (appId == "379720") {
+        DoomDiagnostics.event("WINEDEBUG=${envVars.get("WINEDEBUG")}")
+    }
+
     // capture debug output to file if either Wine or Box86/64 logging is enabled
     var logFile: File? = null
     val captureLogs = debugRun || enableWineDebug || enableBox86Logs
     if (captureLogs) {
-        val wineLogDir = File(context.getExternalFilesDir(null), "wine_logs")
-        wineLogDir.mkdirs()
-        logFile = File(wineLogDir, if (debugRun) "debug_run_$appId.log" else "wine_debug.log")
+        DoomLogStorage.ensureDirectories()
+        logFile = if (debugRun) {
+            DebugReportUtils.wineLogFile(context, appId)
+        } else {
+            DoomLogStorage.newWineLog(appId = appId, debugRun = false)
+        }
         if (logFile.exists()) logFile.delete()
+        if (appId == "379720") {
+            DoomDiagnostics.event("WineLog=${logFile.absolutePath}")
+        }
         if (debugRun) DebugReportUtils.startLogcatCapture(context, appId)
     }
 
@@ -4252,6 +4280,9 @@ private fun setupXEnvironment(
     guestProgramLauncherComponent.envVars = EnvVars().apply { putAll(envVars) }
 
     val gameTerminationCallback = Callback<Int> { status ->
+        if (appId == "379720") {
+            DoomDiagnostics.event("Guest program terminated status=$status")
+        }
         if (status != 0) {
             Timber.e("Guest program terminated with status: $status")
             onGameLaunchError?.invoke("Game terminated with error status: $status")
@@ -4365,8 +4396,14 @@ private fun setupXEnvironment(
     }
 
     try {
+        if (appId == "379720") {
+            DoomDiagnostics.event("Starting X/Wine environment components")
+        }
         immersiveHooks?.windowsVr?.beforeGuestProcessStart()
         environment.startEnvironmentComponents()
+        if (appId == "379720") {
+            DoomDiagnostics.event("X/Wine environment components started")
+        }
         immersiveHooks?.windowsVr?.onEnvironmentStarted()
         if (container != null && !bootToContainer) {
             CoroutineScope(Dispatchers.IO).launch { GameFileDetection.ensure(context, container) }

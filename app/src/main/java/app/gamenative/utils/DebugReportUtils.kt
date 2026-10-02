@@ -26,11 +26,15 @@ object DebugReportUtils {
     private const val LOG_TAIL_BYTES = 7L * 1024 * 1024
     private const val LOG_MAX_BYTES = LOG_HEAD_BYTES + LOG_TAIL_BYTES
 
-    fun reportsDir(context: Context): File =
-        File(context.getExternalFilesDir(null), "debug_reports")
+    fun reportsDir(context: Context): File {
+        DoomLogStorage.ensureDirectories()
+        return DoomLogStorage.debugRunLogs
+    }
 
-    fun wineLogFile(context: Context, appId: String): File =
-        File(context.getExternalFilesDir(null), "wine_logs/debug_run_$appId.log")
+    fun wineLogFile(context: Context, appId: String): File {
+        DoomLogStorage.ensureDirectories()
+        return File(DoomLogStorage.debugRunLogs, "debug_run_$appId.log")
+    }
 
     fun headerFile(reportDir: File): File = File(reportDir, HEADER_FILE)
 
@@ -40,8 +44,10 @@ object DebugReportUtils {
 
     fun logcatFile(reportDir: File): File = File(reportDir, LOGCAT_FILE)
 
-    private fun rawLogcatFile(context: Context, appId: String): File =
-        File(context.getExternalFilesDir(null), "wine_logs/debug_run_$appId.logcat")
+    private fun rawLogcatFile(context: Context, appId: String): File {
+        DoomLogStorage.ensureDirectories()
+        return File(DoomLogStorage.debugRunLogs, "debug_run_$appId.logcat")
+    }
 
     fun startLogcatCapture(context: Context, appId: String) {
         stopLogcatCapture()
