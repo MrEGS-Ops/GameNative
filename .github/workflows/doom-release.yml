@@ -11,6 +11,11 @@ on:
         description: "Android version code, e.g. 1000"
         required: true
         default: "1000"
+  push:
+    branches:
+      - master
+    paths:
+      - "release/doom-version.txt"
 
 permissions:
   contents: write
@@ -19,13 +24,28 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      DOOM_VERSION_NAME: ${{ inputs.version_name }}
-      DOOM_VERSION_CODE: ${{ inputs.version_code }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Resolve release version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION_NAME="${{ inputs.version_name }}"
+            VERSION_CODE="${{ inputs.version_code }}"
+          else
+            VERSION_NAME="$(sed -n '1p' release/doom-version.txt | tr -d '\r\n')"
+            VERSION_CODE="$(sed -n '2p' release/doom-version.txt | tr -d '\r\n')"
+          fi
+
+          test -n "$VERSION_NAME" || { echo "Missing DOOM version name"; exit 1; }
+          test -n "$VERSION_CODE" || { echo "Missing DOOM version code"; exit 1; }
+          [[ "$VERSION_CODE" =~ ^[0-9]+$ ]] || { echo "DOOM version code must be numeric"; exit 1; }
+
+          echo "DOOM_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "DOOM_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "Release version: $VERSION_NAME ($VERSION_CODE)"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -137,7 +157,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GameNative-DOOM-${{ inputs.version_name }}
+          name: GameNative-DOOM-${{ env.DOOM_VERSION_NAME }}
           path: |
             GameNative-DOOM.apk
             update.json
