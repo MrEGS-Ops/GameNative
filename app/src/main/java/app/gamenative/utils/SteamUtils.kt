@@ -549,7 +549,72 @@ object SteamUtils {
                 Character.getType(char) != Character.FORMAT.toInt()
         }.trim()
 
+    /**
+     * Ensures ColdClientLoader can resolve Steam's logical install directory inside this exact
+     * container. This runs on every ColdClient launch so app updates can repair an older container
+     * that still has the pre-1.0.3 standalone DOOM layout (steamapps/common/Game instead of DOOM).
+     */
+    internal fun ensureColdClientGameLink(steamAppId: Int, container: Container): Boolean {
+        val appInfo = getAppInfoOf(steamAppId)
+        val gameDir = File(SteamService.getAppDirPath(steamAppId))
+        if (!gameDir.isDirectory) {
+            Timber.w("ColdClient game directory missing for appId=$steamAppId: ${gameDir.absolutePath}")
+            return false
+        }
+
+        val gameName = getAppDirName(appInfo).ifBlank { gameDir.name }
+        val commonDir = File(
+            container.getRootDir(),
+            ".wine/drive_c/Program Files (x86)/Steam/steamapps/common",
+        )
+        if (!commonDir.exists() && !commonDir.mkdirs()) {
+            Timber.w("Unable to create ColdClient common dir: ${commonDir.absolutePath}")
+            return false
+        }
+
+        val steamGameLink = File(commonDir, gameName)
+        val linkPath = steamGameLink.toPath()
+        val gamePath = gameDir.toPath().toAbsolutePath().normalize()
+
+        try {
+            if (Files.isSymbolicLink(linkPath)) {
+                val rawTarget = Files.readSymbolicLink(linkPath)
+                val resolvedTarget =
+                    if (rawTarget.isAbsolute) rawTarget.normalize()
+                    else linkPath.parent.resolve(rawTarget).normalize()
+
+                if (resolvedTarget == gamePath) {
+                    Timber.i("ColdClient game link already correct: $linkPath -> $gamePath")
+                    return true
+                }
+
+                Files.delete(linkPath)
+                Timber.i("Removed stale ColdClient game link: $linkPath -> $resolvedTarget")
+            } else if (steamGameLink.exists()) {
+                val sameLocation = runCatching {
+                    steamGameLink.canonicalFile == gameDir.canonicalFile
+                }.getOrDefault(false)
+                if (sameLocation) return true
+
+                // Never delete a real directory here. A conflicting real path needs manual
+                // inspection rather than risking game/container data.
+                Timber.w(
+                    "ColdClient path exists and is not a symlink: ${steamGameLink.absolutePath}",
+                )
+                return false
+            }
+
+            Files.createSymbolicLink(linkPath, gamePath)
+            Timber.i("Created ColdClient game link: $linkPath -> $gamePath")
+            return true
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to ensure ColdClient game link for appId=$steamAppId")
+            return false
+        }
+    }
+
     internal fun writeColdClientIni(steamAppId: Int, container: Container, launchInfo: LaunchInfo? = null) {
+        ensureColdClientGameLink(steamAppId, container)
         val gameName = getAppDirName(getAppInfoOf(steamAppId))
         val workingDir = launchInfo?.workingDir
         val iniFile = File(container.getRootDir(), ".wine/drive_c/Program Files (x86)/Steam/ColdClientLoader.ini")
