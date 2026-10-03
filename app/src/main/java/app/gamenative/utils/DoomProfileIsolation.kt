@@ -59,18 +59,8 @@ object DoomProfileIsolation {
             "ProfileIsolation/${label}_${DoomLogStorage.timestamp()}",
         ).apply { mkdirs() }
 
-    private fun relativeLabel(profile: File): String {
-        val steamUser = profile.parentFile?.name ?: "steam-user"
-        val windowsUser = profile.parentFile
-            ?.parentFile
-            ?.parentFile
-            ?.parentFile
-            ?.parentFile
-            ?.parentFile
-            ?.name
-            ?: "windows-user"
-        return "$windowsUser/$steamUser"
-    }
+    private fun profileBackupLabel(profile: File): String =
+        profile.parentFile?.name ?: "steam-user"
 
     /**
      * Restores any original PROFILE left behind by a previous isolation run.
@@ -93,7 +83,7 @@ object DoomProfileIsolation {
                 if (profile.exists()) {
                     val archive = File(
                         recoveredRoot,
-                        "${steamUserDir.parentFile?.parentFile?.parentFile?.parentFile?.parentFile?.name ?: "xuser"}/${steamUserDir.name}/PROFILE",
+                        "${steamUserDir.name}/PROFILE",
                     )
                     archive.parentFile?.mkdirs()
                     val copied = runCatching {
@@ -160,7 +150,7 @@ object DoomProfileIsolation {
                     throw IllegalStateException("Original backup already exists")
                 }
 
-                val publicCopy = File(backupRoot, "${relativeLabel(profile)}/PROFILE")
+                val publicCopy = File(backupRoot, "${profileBackupLabel(profile)}/PROFILE")
                 publicCopy.parentFile?.mkdirs()
                 if (!profile.copyRecursively(publicCopy, overwrite = true)) {
                     throw IllegalStateException("Public backup copy failed")
