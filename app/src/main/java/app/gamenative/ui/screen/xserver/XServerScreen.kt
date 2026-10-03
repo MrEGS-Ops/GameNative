@@ -3959,6 +3959,10 @@ private fun setupXEnvironment(
 ): XEnvironment {
     ProcessHelper.hardKillStaleWineProcesses()
 
+    val isDoom = runCatching {
+        ContainerUtils.extractGameIdFromContainerId(appId) == 379720
+    }.getOrDefault(appId == "379720")
+
     if (isDoom) {
         DoomDiagnostics.event("setupXEnvironment begin")
         DoomDiagnostics.event(
@@ -3968,9 +3972,6 @@ private fun setupXEnvironment(
     }
 
     val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
-    val isDoom = runCatching {
-        ContainerUtils.extractGameIdFromContainerId(appId) == 379720
-    }.getOrDefault(appId == "379720")
     val lc_all = container!!.lC_ALL
     val imageFs = ImageFs.find(context)
     Timber.i("ImageFs paths:")
