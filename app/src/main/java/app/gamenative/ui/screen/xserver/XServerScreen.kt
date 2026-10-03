@@ -3982,7 +3982,13 @@ private fun setupXEnvironment(
     Timber.i("- wineprefix: ${imageFs.wineprefix}")
 
     val contentsManager = ContentsManager(context)
+    val contentsSyncStart = if (isDoom) android.os.SystemClock.elapsedRealtime() else 0L
     contentsManager.syncContents()
+    if (isDoom) {
+        DoomDiagnostics.event(
+            "PHASE contentsSyncMs=${android.os.SystemClock.elapsedRealtime() - contentsSyncStart}",
+        )
+    }
     envVars.put("LC_ALL", lc_all)
     envVars.put("MESA_DEBUG", "silent")
     envVars.put("MESA_NO_ERROR", "1")
@@ -4087,7 +4093,13 @@ private fun setupXEnvironment(
     }
 
     val rootPath = imageFs.getRootDir().getPath()
+    val tmpClearStart = if (isDoom) android.os.SystemClock.elapsedRealtime() else 0L
     FileUtils.clear(imageFs.getTmpDir())
+    if (isDoom) {
+        DoomDiagnostics.event(
+            "PHASE tmpClearMs=${android.os.SystemClock.elapsedRealtime() - tmpClearStart}",
+        )
+    }
 
     val usrGlibc: Boolean = container.getContainerVariant().equals(Container.GLIBC, ignoreCase = true)
     val guestProgramLauncherComponent = if (usrGlibc) {
