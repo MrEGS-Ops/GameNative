@@ -28,6 +28,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class ControllerManager {
     private static final String TAG = "ControllerManager";
     private static final int MAX_SLOTS = 4;
+    // Meta/Oculus USB vendor ID. Quest exposes a companion HID device that reports
+    // joystick-shaped axes but is not the actual Android gamepad device.
+    private static final int META_VENDOR_ID = 0x2833;
 
     @SuppressLint("StaticFieldLeak")
     private static ControllerManager instance;
@@ -120,6 +123,46 @@ public class ControllerManager {
             }
         }
         firstSeenByIdentifier.keySet().retainAll(present);
+
+        // Quest can remember the non-gamepad Meta companion HID as P1 and leave the
+        // real Meta gamepad on P2. Repair that stale assignment without displacing a
+        // user's explicitly assigned non-Meta controller.
+        repairQuestPrimaryControllerAssignment();
+    }
+
+    private void repairQuestPrimaryControllerAssignment() {
+        InputDevice questGamepad = null;
+        int questGamepadCount = 0;
+        for (InputDevice device : detectedDevices) {
+            if (device.getVendorId() == META_VENDOR_ID
+                    && device.supportsSource(InputDevice.SOURCE_GAMEPAD)) {
+                questGamepad = device;
+                questGamepadCount++;
+            }
+        }
+        if (questGamepadCount != 1 || questGamepad == null) return;
+
+        String questIdentifier = getDeviceIdentifier(questGamepad);
+        if (questIdentifier == null || getSlotForIdentifier(questIdentifier) == 0) return;
+
+        String currentP1Identifier = slotAssignments.get(0);
+        InputDevice currentP1Device = getAssignedDeviceForSlot(0);
+
+        // Never steal P1 from a connected external controller. Also preserve a saved
+        // disconnected non-Meta controller assignment for users who intentionally use it.
+        if (currentP1Device != null && currentP1Device.getVendorId() != META_VENDOR_ID) return;
+        if (currentP1Device == null
+                && currentP1Identifier != null
+                && !currentP1Identifier.startsWith("vendor_" + META_VENDOR_ID + "_")) {
+            return;
+        }
+
+        assignDeviceIdentifierToSlot(0, questIdentifier);
+        enabledSlots[0] = true;
+        saveAssignments();
+        notifySlotsChanged();
+        Log.i(TAG, "Repaired Quest controller assignment: deviceId="
+                + questGamepad.getId() + " -> Player 1");
     }
 
     private boolean isSettled(String identifier) {
@@ -184,6 +227,14 @@ public class ControllerManager {
      */
     public static boolean isGameController(InputDevice device) {
         if (device == null) return false;
+
+        // Quest exposes a second Meta HID with joystick-like axes but no real gamepad
+        // source. Treating it as a controller can put it in P1 and the real Quest
+        // controller in P2, leaving games apparently unresponsive.
+        if (device.getVendorId() == META_VENDOR_ID
+                && !device.supportsSource(InputDevice.SOURCE_GAMEPAD)) {
+            return false;
+        }
 
         boolean isGamepad = device.supportsSource(InputDevice.SOURCE_GAMEPAD);
         boolean isJoystick = device.supportsSource(InputDevice.SOURCE_JOYSTICK);

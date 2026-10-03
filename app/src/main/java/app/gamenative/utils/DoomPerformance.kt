@@ -78,7 +78,21 @@ object DoomPerformance {
 
         // Persistent driver shader cache for the OpenGL/Turnip path.
         envVars.put("MESA_SHADER_CACHE_DISABLE", "false")
-        envVars.put("MESA_SHADER_CACHE_MAX_SIZE", "2G")
+        // 2 GB was excessive for a standalone Quest target. This is a disk-cache
+        // ceiling, not a quality setting, so 512 MB keeps the warm-start benefit
+        // without encouraging huge cache churn during the already memory-heavy boot.
+        envVars.put("MESA_SHADER_CACHE_MAX_SIZE", "512M")
+
+        // Quest 3 has unified system/GPU memory. DOOM was driving Android below its
+        // low-memory threshold during startup, at which point DOOMx64.exe vanished.
+        // Cap the memory that the wrapper/Turnip advertises to the guest so the engine
+        // cannot budget as though it had a discrete multi-gigabyte VRAM pool.
+        envVars.put("WRAPPER_VMEM_MAX_SIZE", "2048")
+        envVars.put("TU_OVERRIDE_HEAP_SIZE", "2048")
+
+        // Keep glibc arena growth/fragmentation bounded. Harmless on runtimes that do
+        // not use glibc malloc and useful on the paths that do.
+        envVars.put("MALLOC_ARENA_MAX", "2")
 
         if (!diagnostics && !debugRun) {
             envVars.put("DXVK_LOG_LEVEL", "none")

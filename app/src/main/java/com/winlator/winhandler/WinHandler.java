@@ -316,6 +316,35 @@ public class WinHandler {
         buffer.putShort(OFF_RT, (short)-32767);
     }
 
+    private void scheduleGamepadSharedMemoryReassert() {
+        Thread reassertThread = new Thread(() -> {
+            final long[] absoluteDelaysMs = new long[]{750L, 2500L, 7000L};
+            long elapsed = 0L;
+            for (long targetDelay : absoluteDelaysMs) {
+                long sleepMs = targetDelay - elapsed;
+                if (sleepMs > 0L) {
+                    try {
+                        Thread.sleep(sleepMs);
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+                elapsed = targetDelay;
+                if (!running) return;
+
+                for (int slot = 0; slot < MAX_PLAYERS; slot++) {
+                    MappedByteBuffer buffer = getGamepadBuffer(slot);
+                    if (buffer != null) {
+                        notifyStateChanged(slot);
+                    }
+                }
+            }
+        }, "GamepadShmReassert");
+        reassertThread.setDaemon(true);
+        reassertThread.start();
+    }
+
     private boolean sendPacket(int port) {
         try {
             int size = this.sendData.position();
@@ -762,6 +791,13 @@ public class WinHandler {
         refreshControllerMappings();
         this.running = true;
         activeInstance = this;
+
+        // evshim can receive the initial connected-state notification before the guest
+        // has mmap'd gamepad.mem (the Quest logs show "missing shm" during startup).
+        // Re-announce the already-written shared-memory state after Wine/DOOM has had
+        // time to map it so the menu does not start with a permanently invisible P1.
+        scheduleGamepadSharedMemoryReassert();
+
         startSendThread();
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
