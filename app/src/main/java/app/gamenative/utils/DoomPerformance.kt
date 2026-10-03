@@ -65,9 +65,8 @@ object DoomPerformance {
         envVars.put("FEX_DISKCACHEPRUNESTALEENTRIES", "1")
         envVars.put("FEX_DISKCACHEMAXFILESIZE", "2147483648")
 
-        // Keep the in-memory lookup caches hot instead of trading speed for memory.
-        envVars.put("FEX_DISABLEL2CACHE", "0")
-        envVars.put("FEX_DYNAMICL1CACHE", "0")
+        // Cache policy is mode-specific below. Fast Boot keeps FEX's memory-saving
+        // lookup-cache behaviour because Quest RAM pressure is a real constraint.
 
         // Remove avoidable FEX overhead.
         envVars.put("FEX_DISABLETELEMETRY", "1")
@@ -90,6 +89,10 @@ object DoomPerformance {
             MODE_FAST_BOOT -> {
                 // FEX documents multiblock as capable of long JIT compile times.
                 // Turning it off favours getting through DOOM's startup/profile path faster.
+                // Keep the memory-saving L2/L1 defaults because the Quest can approach
+                // low-memory conditions during DOOM startup.
+                envVars.put("FEX_DISABLEL2CACHE", "1")
+                envVars.put("FEX_DYNAMICL1CACHE", "1")
                 envVars.put("FEX_MULTIBLOCK", "0")
                 envVars.put("FEX_MAXINST", "3000")
                 envVars.put("FEX_HALFBARRIERTSOENABLED", "1")
@@ -98,6 +101,9 @@ object DoomPerformance {
 
             MODE_MAX -> {
                 // Higher steady-state throughput after the disk cache has warmed.
+                // This intentionally spends more RAM and is therefore not the default.
+                envVars.put("FEX_DISABLEL2CACHE", "0")
+                envVars.put("FEX_DYNAMICL1CACHE", "0")
                 envVars.put("FEX_MULTIBLOCK", "1")
                 envVars.put("FEX_MAXINST", "5000")
                 envVars.put("FEX_HALFBARRIERTSOENABLED", "0")
