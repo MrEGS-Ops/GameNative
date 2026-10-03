@@ -13,44 +13,26 @@ import kotlinx.coroutines.withContext
  *
  * The old debug-signed build was unable to update in-place to the permanent signer, so the
  * existing DOOM install was copied to the top level of public Downloads before uninstalling it.
- * This helper moves only the known DOOM game-root entries into a persistent GameNative-DOOM/Game
- * folder and registers that folder as an imported Steam install. Moving inside public Downloads is
- * normally an atomic rename on the same filesystem, so the ~69 GiB install is not copied again.
+ *
+ * Quest can expose the copied files for reading while still refusing direct mkdir/rename writes
+ * in public Downloads. To avoid another ~69 GiB copy and to keep the backup untouched, register
+ * the existing Downloads root in-place as DOOM's imported Steam install.
  */
 object DoomBackupRestore {
     const val DOOM_APP_ID = 379720
-
-    private val gameRootEntries = listOf(
-        ".DepotDownloader",
-        ".DownloadInfo",
-        "EmptySteamDepot",
-        "_CommonRedist",
-        "base",
-        "virtualtextures",
-        ".download_complete",
-        ".steam_coldclient_used",
-        ".vcredist_installed",
-        "cChromeEditorLibrary.dll",
-        "DOOMx64.exe",
-        "DOOMx64vk.exe",
-        "bink2w64.dll",
-        "steam_api64.dll",
-        "steam_controller_config.vdf",
-        "superscriptx64.dll",
-    )
 
     @Suppress("DEPRECATION")
     private fun downloadsRoot(): File =
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
 
+    /**
+     * The restored game root is deliberately the existing public Downloads root. The migration
+     * must not move or delete the user's backed-up game files.
+     */
     val restoredGameRoot: File
-        get() = File(DoomLogStorage.root, "Game")
+        get() = downloadsRoot()
 
-    fun hasRestorableBackup(): Boolean {
-        val source = downloadsRoot()
-        val destination = restoredGameRoot
-        return hasCoreFiles(source) || hasCoreFiles(destination)
-    }
+    fun hasRestorableBackup(): Boolean = hasCoreFiles(downloadsRoot())
 
     private fun hasCoreFiles(root: File): Boolean =
         File(root, "DOOMx64.exe").isFile &&
@@ -61,52 +43,19 @@ object DoomBackupRestore {
     suspend fun restore(): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
             val source = downloadsRoot()
-            val destination = restoredGameRoot
 
-            DoomLogStorage.ensureDirectories()
-            check(destination.mkdirs() || destination.isDirectory) {
-                "Could not create ${destination.absolutePath}"
+            check(hasCoreFiles(source)) {
+                "DOOM backup was not found in Downloads"
             }
 
-            if (!hasCoreFiles(destination)) {
-                check(hasCoreFiles(source)) {
-                    "DOOM backup was not found in Downloads"
-                }
-
-                val moved = mutableListOf<Pair<File, File>>()
-                try {
-                    for (name in gameRootEntries) {
-                        val from = File(source, name)
-                        if (!from.exists()) continue
-
-                        val to = File(destination, name)
-                        check(!to.exists()) {
-                            "Restore destination already contains $name"
-                        }
-                        check(from.renameTo(to)) {
-                            "Could not move $name into the persistent DOOM game folder"
-                        }
-                        moved += from to to
-                    }
-                } catch (error: Throwable) {
-                    // Best-effort rollback. Never delete either side during rollback.
-                    moved.asReversed().forEach { (original, movedFile) ->
-                        if (movedFile.exists() && !original.exists()) {
-                            movedFile.renameTo(original)
-                        }
-                    }
-                    throw error
+            // The original backup already contains this marker. Only try to recreate it if it is
+            // unexpectedly absent; do not move, overwrite, or delete any backed-up game data.
+            val marker = File(source, ".download_complete")
+            if (!marker.isFile) {
+                check(marker.createNewFile()) {
+                    "DOOM backup is present, but the install marker could not be created"
                 }
             }
-
-            check(hasCoreFiles(destination)) {
-                "Restored DOOM folder is missing required game files"
-            }
-
-            MarkerUtils.addMarker(
-                destination.absolutePath,
-                app.gamenative.enums.Marker.DOWNLOAD_COMPLETE_MARKER,
-            )
 
             val service = SteamService.instance ?: error("Steam service is not ready")
             val depotIds = SteamService
@@ -122,11 +71,11 @@ object DoomBackupRestore {
                     downloadedDepots = depotIds,
                     dlcDepots = emptyList(),
                     branch = "public",
-                    customInstallPath = destination.absolutePath,
+                    customInstallPath = source.absolutePath,
                 ),
             )
 
-            destination
+            source
         }
     }
 }
