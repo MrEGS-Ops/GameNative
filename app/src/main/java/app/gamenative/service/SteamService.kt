@@ -9,6 +9,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.IBinder
+import android.os.Environment
 import android.util.Base64
 import app.gamenative.ui.data.Achievement
 import app.gamenative.ui.util.GameInviteNotificationManager
@@ -56,6 +57,7 @@ import app.gamenative.enums.SyncResult
 import app.gamenative.events.AndroidEvent
 import app.gamenative.events.SteamEvent
 import app.gamenative.utils.ContainerUtils
+import app.gamenative.utils.DoomBackupRestore
 import app.gamenative.utils.FileUtils
 import app.gamenative.utils.LicenseSerializer
 import app.gamenative.utils.LocaleHelper
@@ -1748,10 +1750,23 @@ class SteamService : Service(), IChallengeUrlChanged {
         fun getAppDirPath(gameId: Int): String {
             val info = getAppInfoOf(gameId)
 
-            // For installed game, check whether it has customInstallPath and return it
+            // For installed game, check whether it has customInstallPath and return it.
+            // A restored DOOM backup is registered this way and stays exactly where it was found.
             val appInfo = getInstalledApp(gameId)
             if (appInfo != null && appInfo.isImported) {
                 return appInfo.customInstallPath
+            }
+
+            // Standalone Quest DOOM keeps a fresh Steam download in public Downloads so the
+            // game survives app updates/reinstalls and can be inspected/backed up directly.
+            // The normal install flow requests all-files access before the downloader writes
+            // here. Partial downloads also resolve to this same folder and can resume.
+            if (gameId == DoomBackupRestore.DOOM_APP_ID) {
+                @Suppress("DEPRECATION")
+                val downloads = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS,
+                )
+                return Paths.get(downloads.absolutePath, "GameNative-DOOM", "Game").pathString
             }
 
             val appName = getAppDirName(info)
