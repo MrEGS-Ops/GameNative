@@ -777,9 +777,12 @@ object SteamUtils {
                 commonDir.mkdirs()
             }
 
-            // Get game directory info
+            // Get game directory info. The physical folder may be a custom path whose leaf
+            // does not match Steam's installDir (e.g. DOOM lives in GameNative-DOOM/Game).
+            // ColdClientLoader resolves the executable through steamapps/common/<installDir>,
+            // so the symlink name must use Steam's logical install directory, not gameDir.name.
             val gameDir = File(SteamService.getAppDirPath(steamAppId))
-            val gameName = gameDir.name
+            val gameName = getAppDirName(appInfo)
             val sizeOnDisk = calculateDirectorySize(gameDir)
 
             // Create symlink from Steam common directory to actual game directory
