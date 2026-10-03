@@ -137,6 +137,7 @@ import app.gamenative.utils.DebugReportUtils
 import app.gamenative.utils.DoomDiagnostics
 import app.gamenative.utils.DoomLogStorage
 import app.gamenative.utils.DoomPerformance
+import app.gamenative.utils.DoomProfileIsolation
 import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.LsfgQuickMenuHelper
 import app.gamenative.utils.LsfgVkManager
@@ -4027,6 +4028,17 @@ private fun setupXEnvironment(
         DoomDiagnostics.event("WineDebugChannels=$wineDebugChannels")
         DoomDiagnostics.event("DebugRun=$debugRun")
         DoomDiagnostics.event("DiagnosticsMode=$diagnostics")
+
+        val staleProfileRestore = DoomProfileIsolation.restoreIfNeeded(container.rootDir)
+        if (staleProfileRestore.changed) {
+            DoomDiagnostics.event("PROFILE restore: ${staleProfileRestore.message}")
+        }
+
+        if (PrefManager.doomProfileIsolationNextLaunch) {
+            val isolation = DoomProfileIsolation.begin(container.rootDir)
+            PrefManager.doomProfileIsolationNextLaunch = false
+            DoomDiagnostics.event("PROFILE isolation: ${isolation.message}")
+        }
     }
     // explicitly enable or disable Wine debug channels
     if (debugRun) {
@@ -4035,12 +4047,14 @@ private fun setupXEnvironment(
         envVars.put("DXVK_LOG_PATH", "none")
         envVars.put("VKD3D_DEBUG", "warn")
     } else if (diagnostics) {
+        // Lightweight diagnostics only. +vulkan generated hundreds of thousands of
+        // trace lines on Quest and materially distorted startup time/memory pressure.
         envVars.put("WRAPPER_DIAG", "1")
         envVars.put("WRAPPER_DIAG_APPID", appId)
-        envVars.put("WRAPPER_LOG_LEVEL", "info")
+        envVars.put("WRAPPER_LOG_LEVEL", "warn")
         envVars.put("VKD3D_DEBUG", "warn")
-        envVars.put("DXVK_LOG_LEVEL", "info")
-        envVars.put("WINEDEBUG", "+vulkan")
+        envVars.put("DXVK_LOG_LEVEL", "warn")
+        envVars.put("WINEDEBUG", "warn+seh,+timestamp,+pid,+tid")
     } else {
         envVars.put(
             "WINEDEBUG",
@@ -5064,6 +5078,14 @@ private fun exit(
     } catch (e: Exception) {
         Timber.e(e, "winHandler.stop() failed during exit")
     }
+
+    if (runCatching { ContainerUtils.extractGameIdFromContainerId(appId) == 379720 }.getOrDefault(false)) {
+        val profileRestore = DoomProfileIsolation.restoreIfNeeded(container.rootDir)
+        if (profileRestore.changed) {
+            DoomDiagnostics.event("PROFILE restore on exit: ${profileRestore.message}")
+        }
+    }
+
     PluviaApp.shutdownEnvironment()
     EaLaunchSupport.stop()
 
