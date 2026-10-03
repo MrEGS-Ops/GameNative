@@ -136,6 +136,7 @@ import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.DebugReportUtils
 import app.gamenative.utils.DoomDiagnostics
 import app.gamenative.utils.DoomLogStorage
+import app.gamenative.utils.DoomPerformance
 import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.LsfgQuickMenuHelper
 import app.gamenative.utils.LsfgVkManager
@@ -4044,7 +4045,22 @@ private fun setupXEnvironment(
         )
     }
     if (isDoom) {
+        val doomPerformanceMode = PrefManager.doomPerformanceMode
+        DoomPerformance.apply(
+            envVars = envVars,
+            modeValue = doomPerformanceMode,
+            diagnostics = diagnostics,
+            debugRun = debugRun,
+        )
+        DoomDiagnostics.event("PerformanceMode=${DoomPerformance.modeLabel(doomPerformanceMode)}")
+        DoomDiagnostics.event("RendererMode=${DoomPerformance.rendererLabel(PrefManager.doomRendererMode)}")
         DoomDiagnostics.event("WINEDEBUG=${envVars.get("WINEDEBUG")}")
+        DoomDiagnostics.event(
+            "FEX diskCache=${envVars.get("FEX_DISKCACHE")} " +
+                "multiblock=${envVars.get("FEX_MULTIBLOCK")} " +
+                "disableL2=${envVars.get("FEX_DISABLEL2CACHE")} " +
+                "dynamicL1=${envVars.get("FEX_DYNAMICL1CACHE")}",
+        )
     }
 
     // capture debug output to file if either Wine or Box86/64 logging is enabled
