@@ -121,7 +121,7 @@ object DoomPerformance {
 
     fun argumentsForRenderer(arguments: String, rendererValue: String?): String {
         val api = if (normalizeRenderer(rendererValue) == RENDER_VULKAN) "1" else "0"
-        val regex = Regex("""(?i)(^|\\s)\\+r_renderAPI\\s+[01](?=\\s|$)""")
+        val regex = Regex("""(?i)(^|\s)\+r_renderAPI\s+[01](?=\s|$)""")
         val cleaned = arguments.trim()
         return if (regex.containsMatchIn(cleaned)) {
             regex.replace(cleaned) { match ->
