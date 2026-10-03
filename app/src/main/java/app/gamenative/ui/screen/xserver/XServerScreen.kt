@@ -3959,7 +3959,7 @@ private fun setupXEnvironment(
 ): XEnvironment {
     ProcessHelper.hardKillStaleWineProcesses()
 
-    if (appId == "379720") {
+    if (isDoom) {
         DoomDiagnostics.event("setupXEnvironment begin")
         DoomDiagnostics.event(
             "Container screen=${container?.screenSize} graphics=${container?.graphicsDriver} " +
@@ -3968,6 +3968,9 @@ private fun setupXEnvironment(
     }
 
     val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
+    val isDoom = runCatching {
+        ContainerUtils.extractGameIdFromContainerId(appId) == 379720
+    }.getOrDefault(appId == "379720")
     val lc_all = container!!.lC_ALL
     val imageFs = ImageFs.find(context)
     Timber.i("ImageFs paths:")
@@ -4009,7 +4012,7 @@ private fun setupXEnvironment(
     val enableWineDebug = PrefManager.enableWineDebug
     val enableBox86Logs = WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)
     val wineDebugChannels = PrefManager.wineDebugChannels
-    if (appId == "379720") {
+    if (isDoom) {
         DoomDiagnostics.start(context, appId)
         DoomDiagnostics.event("DOOM launch requested")
         DoomDiagnostics.event("WineDebugEnabled=$enableWineDebug")
@@ -4039,13 +4042,13 @@ private fun setupXEnvironment(
                 "-all",
         )
     }
-    if (appId == "379720") {
+    if (isDoom) {
         DoomDiagnostics.event("WINEDEBUG=${envVars.get("WINEDEBUG")}")
     }
 
     // capture debug output to file if either Wine or Box86/64 logging is enabled
     var logFile: File? = null
-    val captureLogs = debugRun || enableWineDebug || enableBox86Logs
+    val captureLogs = diagnostics || debugRun || enableWineDebug || enableBox86Logs
     if (captureLogs) {
         DoomLogStorage.ensureDirectories()
         logFile = if (debugRun) {
@@ -4054,7 +4057,7 @@ private fun setupXEnvironment(
             DoomLogStorage.newWineLog(appId = appId, debugRun = false)
         }
         if (logFile.exists()) logFile.delete()
-        if (appId == "379720") {
+        if (isDoom) {
             DoomDiagnostics.event("WineLog=${logFile.absolutePath}")
         }
         if (debugRun) DebugReportUtils.startLogcatCapture(context, appId)
@@ -4280,7 +4283,7 @@ private fun setupXEnvironment(
     guestProgramLauncherComponent.envVars = EnvVars().apply { putAll(envVars) }
 
     val gameTerminationCallback = Callback<Int> { status ->
-        if (appId == "379720") {
+        if (isDoom) {
             DoomDiagnostics.event("Guest program terminated status=$status")
         }
         if (status != 0) {
@@ -4396,12 +4399,12 @@ private fun setupXEnvironment(
     }
 
     try {
-        if (appId == "379720") {
+        if (isDoom) {
             DoomDiagnostics.event("Starting X/Wine environment components")
         }
         immersiveHooks?.windowsVr?.beforeGuestProcessStart()
         environment.startEnvironmentComponents()
-        if (appId == "379720") {
+        if (isDoom) {
             DoomDiagnostics.event("X/Wine environment components started")
         }
         immersiveHooks?.windowsVr?.onEnvironmentStarted()
