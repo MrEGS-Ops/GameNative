@@ -1,5 +1,7 @@
 package app.gamenative.utils
 
+import android.content.Context
+import com.winlator.xenvironment.ImageFs
 import java.io.File
 
 /**
@@ -18,6 +20,12 @@ object DoomProfileIsolation {
 
     private const val ORIGINAL_BACKUP_NAME = "PROFILE.gamenative-original"
     private const val ACTIVE_MARKER_NAME = ".gamenative-profile-isolation"
+
+    fun restoreKnownDoomContainer(context: Context): Outcome {
+        val imageFsRoot = ImageFs.find(context).rootDir
+        val containerRoot = File(imageFsRoot, "home/xuser-STEAM_379720")
+        return restoreIfNeeded(containerRoot)
+    }
 
     private fun profileCandidates(containerRoot: File): List<File> {
         val usersRoot = File(containerRoot, ".wine/drive_c/users")
