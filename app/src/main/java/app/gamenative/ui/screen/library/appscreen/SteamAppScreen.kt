@@ -100,6 +100,7 @@ import app.gamenative.ui.util.SnackbarManager
 import app.gamenative.ui.util.SteamSaveTransfer
 import app.gamenative.utils.ContainerUtils.getContainer
 import app.gamenative.utils.CustomGameScanner
+import app.gamenative.utils.DoomBackupRestore
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.json.JSONObject
@@ -634,14 +635,35 @@ class SteamAppScreen : BaseAppScreen() {
                 SteamService.downloadApp(gameId)
             }
         } else if (!isInstalled) {
-            // Request storage permissions first, then show install dialog
-            // This will be handled by the permission launcher in AdditionalDialogs
-            showGameManagerDialog(
-                gameId,
-                GameManagerDialogState(
-                    visible = true
+            if (
+                gameId == DoomBackupRestore.DOOM_APP_ID &&
+                DoomBackupRestore.hasRestorableBackup()
+            ) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    SnackbarManager.show("Restoring DOOM backup from Downloads...")
+                    val restoreResult = DoomBackupRestore.restore()
+                    restoreResult.onSuccess {
+                        PluviaApp.events.emit(
+                            AndroidEvent.LibraryInstallStatusChanged(gameId, GameSource.STEAM),
+                        )
+                        SnackbarManager.show("DOOM backup restored. No game download needed.")
+                    }.onFailure { error ->
+                        Timber.e(error, "Failed to restore DOOM backup")
+                        SnackbarManager.show(
+                            "DOOM backup restore failed: ${error.message ?: "Unknown error"}",
+                        )
+                    }
+                }
+            } else {
+                // Request storage permissions first, then show install dialog
+                // This will be handled by the permission launcher in AdditionalDialogs
+                showGameManagerDialog(
+                    gameId,
+                    GameManagerDialogState(
+                        visible = true
+                    )
                 )
-            )
+            }
         } else {
             onClickPlay(false)
         }
