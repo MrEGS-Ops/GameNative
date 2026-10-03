@@ -201,6 +201,12 @@ fun SettingsGroupDebug() {
             else DoomPerformance.normalizeRenderer(PrefManager.doomRendererMode),
         )
     }
+    var doomProfileIsolationArmed by rememberSaveable {
+        mutableStateOf(
+            if (isPreview) false
+            else PrefManager.doomProfileIsolationNextLaunch,
+        )
+    }
     var showDiagnosticLogDialog by rememberSaveable { mutableStateOf(false) }
     var diagnosticLogFile: File? by rememberSaveable { mutableStateOf(null) }
 
@@ -294,6 +300,23 @@ fun SettingsGroupDebug() {
                 doomRendererMode = DoomPerformance.nextRenderer(doomRendererMode)
                 if (!isPreview) PrefManager.doomRendererMode = doomRendererMode
                 SnackbarManager.show("DOOM renderer: ${DoomPerformance.rendererLabel(doomRendererMode)}")
+            },
+        )
+        SettingsSwitch(
+            colors = settingsTileColorsAlt(),
+            state = doomProfileIsolationArmed,
+            title = { Text(text = "Fresh DOOM PROFILE test (next launch)") },
+            subtitle = {
+                Text(
+                    text = if (doomProfileIsolationArmed)
+                        "ARMED — original PROFILE will be backed up and restored automatically"
+                    else
+                        "Off — enable once to test whether the Loading Profile crash is save/profile related",
+                )
+            },
+            onCheckedChange = {
+                doomProfileIsolationArmed = it
+                if (!isPreview) PrefManager.doomProfileIsolationNextLaunch = it
             },
         )
         SettingsMenuLink(
