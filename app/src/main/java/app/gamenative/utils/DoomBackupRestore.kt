@@ -14,9 +14,8 @@ import kotlinx.coroutines.withContext
  * The old debug-signed build was unable to update in-place to the permanent signer, so the
  * existing DOOM install was copied to the top level of public Downloads before uninstalling it.
  *
- * Quest can expose the copied files for reading while still refusing direct mkdir/rename writes
- * in public Downloads. To avoid another ~69 GiB copy and to keep the backup untouched, register
- * the existing Downloads root in-place as DOOM's imported Steam install.
+ * If that backup exists, register it in-place without moving or deleting it. If no backup exists,
+ * a clean Steam install uses its own persistent folder under public Downloads.
  */
 object DoomBackupRestore {
     const val DOOM_APP_ID = 379720
@@ -26,13 +25,19 @@ object DoomBackupRestore {
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
 
     /**
-     * The restored game root is deliberately the existing public Downloads root. The migration
-     * must not move or delete the user's backed-up game files.
+     * Existing migrated backup location. The backup was copied loose into Downloads root.
      */
     val restoredGameRoot: File
         get() = downloadsRoot()
 
-    fun hasRestorableBackup(): Boolean = hasCoreFiles(downloadsRoot())
+    /**
+     * Dedicated location for a brand-new DOOM download when no migrated backup is present.
+     * The normal GameNative install flow requests all-files/storage permission before writing here.
+     */
+    val cleanInstallGameRoot: File
+        get() = File(downloadsRoot(), "GameNative-DOOM/Game")
+
+    fun hasRestorableBackup(): Boolean = hasCoreFiles(restoredGameRoot)
 
     private fun hasCoreFiles(root: File): Boolean =
         File(root, "DOOMx64.exe").isFile &&
@@ -42,7 +47,7 @@ object DoomBackupRestore {
 
     suspend fun restore(): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
-            val source = downloadsRoot()
+            val source = restoredGameRoot
 
             check(hasCoreFiles(source)) {
                 "DOOM backup was not found in Downloads"
