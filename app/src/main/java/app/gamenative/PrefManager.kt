@@ -619,6 +619,20 @@ object PrefManager {
             setPref(DISABLE_LIBREDIRECT, value)
         }
 
+    private val DOOM_PERFORMANCE_MODE = stringPreferencesKey("doom_performance_mode")
+    var doomPerformanceMode: String
+        get() = getPref(DOOM_PERFORMANCE_MODE, "fast_boot")
+        set(value) {
+            setPref(DOOM_PERFORMANCE_MODE, value)
+        }
+
+    private val DOOM_RENDERER_MODE = stringPreferencesKey("doom_renderer_mode")
+    var doomRendererMode: String
+        get() = getPref(DOOM_RENDERER_MODE, "opengl")
+        set(value) {
+            setPref(DOOM_RENDERER_MODE, value)
+        }
+
     private val SUSPEND_POLICY = stringPreferencesKey("suspend_policy")
     var suspendPolicy: String
         get() = Container.normalizeSuspendPolicy(getPref(SUSPEND_POLICY, Container.SUSPEND_POLICY_MANUAL))
