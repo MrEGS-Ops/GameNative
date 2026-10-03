@@ -136,6 +136,8 @@ import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.DebugReportUtils
 import app.gamenative.utils.DoomDiagnostics
 import app.gamenative.utils.DoomLogStorage
+import app.gamenative.utils.DoomPerformance
+import app.gamenative.utils.DoomProfileIsolation
 import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.LsfgQuickMenuHelper
 import app.gamenative.utils.LsfgVkManager
@@ -3981,7 +3983,13 @@ private fun setupXEnvironment(
     Timber.i("- wineprefix: ${imageFs.wineprefix}")
 
     val contentsManager = ContentsManager(context)
+    val contentsSyncStart = if (isDoom) android.os.SystemClock.elapsedRealtime() else 0L
     contentsManager.syncContents()
+    if (isDoom) {
+        DoomDiagnostics.event(
+            "PHASE contentsSyncMs=${android.os.SystemClock.elapsedRealtime() - contentsSyncStart}",
+        )
+    }
     envVars.put("LC_ALL", lc_all)
     envVars.put("MESA_DEBUG", "silent")
     envVars.put("MESA_NO_ERROR", "1")
@@ -4020,6 +4028,17 @@ private fun setupXEnvironment(
         DoomDiagnostics.event("WineDebugChannels=$wineDebugChannels")
         DoomDiagnostics.event("DebugRun=$debugRun")
         DoomDiagnostics.event("DiagnosticsMode=$diagnostics")
+
+        val staleProfileRestore = DoomProfileIsolation.restoreIfNeeded(container.rootDir)
+        if (staleProfileRestore.changed) {
+            DoomDiagnostics.event("PROFILE restore: ${staleProfileRestore.message}")
+        }
+
+        if (PrefManager.doomProfileIsolationNextLaunch) {
+            val isolation = DoomProfileIsolation.begin(container.rootDir)
+            PrefManager.doomProfileIsolationNextLaunch = false
+            DoomDiagnostics.event("PROFILE isolation: ${isolation.message}")
+        }
     }
     // explicitly enable or disable Wine debug channels
     if (debugRun) {
@@ -4028,12 +4047,14 @@ private fun setupXEnvironment(
         envVars.put("DXVK_LOG_PATH", "none")
         envVars.put("VKD3D_DEBUG", "warn")
     } else if (diagnostics) {
+        // Lightweight diagnostics only. +vulkan generated hundreds of thousands of
+        // trace lines on Quest and materially distorted startup time/memory pressure.
         envVars.put("WRAPPER_DIAG", "1")
         envVars.put("WRAPPER_DIAG_APPID", appId)
-        envVars.put("WRAPPER_LOG_LEVEL", "info")
+        envVars.put("WRAPPER_LOG_LEVEL", "warn")
         envVars.put("VKD3D_DEBUG", "warn")
-        envVars.put("DXVK_LOG_LEVEL", "info")
-        envVars.put("WINEDEBUG", "+vulkan")
+        envVars.put("DXVK_LOG_LEVEL", "warn")
+        envVars.put("WINEDEBUG", "warn+seh,+timestamp,+pid,+tid")
     } else {
         envVars.put(
             "WINEDEBUG",
@@ -4044,7 +4065,22 @@ private fun setupXEnvironment(
         )
     }
     if (isDoom) {
+        val doomPerformanceMode = PrefManager.doomPerformanceMode
+        DoomPerformance.apply(
+            envVars = envVars,
+            modeValue = doomPerformanceMode,
+            diagnostics = diagnostics,
+            debugRun = debugRun,
+        )
+        DoomDiagnostics.event("PerformanceMode=${DoomPerformance.modeLabel(doomPerformanceMode)}")
+        DoomDiagnostics.event("RendererMode=${DoomPerformance.rendererLabel(PrefManager.doomRendererMode)}")
         DoomDiagnostics.event("WINEDEBUG=${envVars.get("WINEDEBUG")}")
+        DoomDiagnostics.event(
+            "FEX diskCache=${envVars.get("FEX_DISKCACHE")} " +
+                "multiblock=${envVars.get("FEX_MULTIBLOCK")} " +
+                "disableL2=${envVars.get("FEX_DISABLEL2CACHE")} " +
+                "dynamicL1=${envVars.get("FEX_DYNAMICL1CACHE")}",
+        )
     }
 
     // capture debug output to file if either Wine or Box86/64 logging is enabled
@@ -4071,7 +4107,13 @@ private fun setupXEnvironment(
     }
 
     val rootPath = imageFs.getRootDir().getPath()
+    val tmpClearStart = if (isDoom) android.os.SystemClock.elapsedRealtime() else 0L
     FileUtils.clear(imageFs.getTmpDir())
+    if (isDoom) {
+        DoomDiagnostics.event(
+            "PHASE tmpClearMs=${android.os.SystemClock.elapsedRealtime() - tmpClearStart}",
+        )
+    }
 
     val usrGlibc: Boolean = container.getContainerVariant().equals(Container.GLIBC, ignoreCase = true)
     val guestProgramLauncherComponent = if (usrGlibc) {
@@ -5036,6 +5078,14 @@ private fun exit(
     } catch (e: Exception) {
         Timber.e(e, "winHandler.stop() failed during exit")
     }
+
+    if (runCatching { ContainerUtils.extractGameIdFromContainerId(appId) == 379720 }.getOrDefault(false)) {
+        val profileRestore = DoomProfileIsolation.restoreIfNeeded(container.rootDir)
+        if (profileRestore.changed) {
+            DoomDiagnostics.event("PROFILE restore on exit: ${profileRestore.message}")
+        }
+    }
+
     PluviaApp.shutdownEnvironment()
     EaLaunchSupport.stop()
 

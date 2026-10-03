@@ -42,6 +42,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import app.gamenative.ui.component.dialog.WineDebugChannelsDialog
 import app.gamenative.utils.DoomLogStorage
+import app.gamenative.utils.DoomPerformance
 import app.gamenative.utils.UpdateManager
 import kotlinx.coroutines.launch
 
@@ -188,6 +189,24 @@ fun SettingsGroupDebug() {
     var updateStatus by rememberSaveable {
         mutableStateOf("Installed ${BuildConfig.VERSION_NAME}")
     }
+    var doomPerformanceMode by rememberSaveable {
+        mutableStateOf(
+            if (isPreview) DoomPerformance.MODE_FAST_BOOT
+            else DoomPerformance.normalizeMode(PrefManager.doomPerformanceMode),
+        )
+    }
+    var doomRendererMode by rememberSaveable {
+        mutableStateOf(
+            if (isPreview) DoomPerformance.RENDER_OPENGL
+            else DoomPerformance.normalizeRenderer(PrefManager.doomRendererMode),
+        )
+    }
+    var doomProfileIsolationArmed by rememberSaveable {
+        mutableStateOf(
+            if (isPreview) false
+            else PrefManager.doomProfileIsolationNextLaunch,
+        )
+    }
     var showDiagnosticLogDialog by rememberSaveable { mutableStateOf(false) }
     var diagnosticLogFile: File? by rememberSaveable { mutableStateOf(null) }
 
@@ -256,6 +275,49 @@ fun SettingsGroupDebug() {
             title = { Text(text = "Check for updates") },
             subtitle = { Text(text = updateStatus) },
             onClick = { checkForUpdate() },
+        )
+        SettingsMenuLink(
+            colors = settingsTileColors(),
+            title = { Text(text = "DOOM performance mode") },
+            subtitle = {
+                Text(
+                    text = "${DoomPerformance.modeLabel(doomPerformanceMode)} — tap to cycle Safe / Fast Boot / Max",
+                )
+            },
+            onClick = {
+                doomPerformanceMode = DoomPerformance.nextMode(doomPerformanceMode)
+                if (!isPreview) PrefManager.doomPerformanceMode = doomPerformanceMode
+                SnackbarManager.show("DOOM performance: ${DoomPerformance.modeLabel(doomPerformanceMode)}")
+            },
+        )
+        SettingsMenuLink(
+            colors = settingsTileColors(),
+            title = { Text(text = "DOOM renderer") },
+            subtitle = {
+                Text(text = "${DoomPerformance.rendererLabel(doomRendererMode)} — tap to switch")
+            },
+            onClick = {
+                doomRendererMode = DoomPerformance.nextRenderer(doomRendererMode)
+                if (!isPreview) PrefManager.doomRendererMode = doomRendererMode
+                SnackbarManager.show("DOOM renderer: ${DoomPerformance.rendererLabel(doomRendererMode)}")
+            },
+        )
+        SettingsSwitch(
+            colors = settingsTileColorsAlt(),
+            state = doomProfileIsolationArmed,
+            title = { Text(text = "Fresh DOOM PROFILE test (next launch)") },
+            subtitle = {
+                Text(
+                    text = if (doomProfileIsolationArmed)
+                        "ARMED — original PROFILE will be backed up and restored automatically"
+                    else
+                        "Off — enable once to test whether the Loading Profile crash is save/profile related",
+                )
+            },
+            onCheckedChange = {
+                doomProfileIsolationArmed = it
+                if (!isPreview) PrefManager.doomProfileIsolationNextLaunch = it
+            },
         )
         SettingsMenuLink(
             colors = settingsTileColors(),

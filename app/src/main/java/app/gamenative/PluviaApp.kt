@@ -1,5 +1,6 @@
 package app.gamenative
 
+import app.gamenative.utils.DoomProfileIsolation
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.StrictMode
@@ -96,6 +97,16 @@ class PluviaApp : SplitCompatApplication() {
 
         // Init our datastore preferences.
         PrefManager.init(this)
+
+        // If a previous one-launch DOOM PROFILE isolation was interrupted by an
+        // Android/app kill, restore the original before Steam Cloud can inspect saves.
+        runCatching {
+            DoomProfileIsolation.restoreKnownDoomContainer(this)
+        }.onSuccess { outcome ->
+            if (outcome.changed) Timber.i("DOOM PROFILE startup restore: ${outcome.message}")
+        }.onFailure { error ->
+            Timber.e(error, "DOOM PROFILE startup restore failed")
+        }
         NexusAuthManager.initialize(this)
         FrontendSyncManager.init(this)
 

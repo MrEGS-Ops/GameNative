@@ -521,6 +521,32 @@ object SteamUtils {
     ): ColdClientLaunchConfig {
         val sanitizedExecutablePath = sanitizeColdClientArgumentText(executablePath)
         val sanitizedExeCommandLine = sanitizeColdClientArgumentText(exeCommandLine)
+
+        if (steamAppId == DoomBackupRestore.DOOM_APP_ID) {
+            val requestedRenderer = DoomPerformance.normalizeRenderer(PrefManager.doomRendererMode)
+            val selectedExecutable = DoomPerformance.executableForRenderer(
+                gameRootDir = gameRootDir,
+                rendererValue = requestedRenderer,
+            )
+            val selectedRenderer =
+                if (selectedExecutable.equals("DOOMx64vk.exe", ignoreCase = true))
+                    DoomPerformance.RENDER_VULKAN
+                else
+                    DoomPerformance.RENDER_OPENGL
+            val selectedArgs = DoomPerformance.argumentsForRenderer(
+                arguments = sanitizedExeCommandLine,
+                rendererValue = selectedRenderer,
+            )
+            Timber.i(
+                "DOOM launch renderer=${DoomPerformance.rendererLabel(selectedRenderer)} " +
+                    "exe=$selectedExecutable args=$selectedArgs",
+            )
+            return ColdClientLaunchConfig(
+                executablePath = selectedExecutable,
+                exeCommandLine = selectedArgs,
+            )
+        }
+
         if (steamAppId == SlayTheSpireModTheSpireCompatibility.APP_ID) {
             SlayTheSpireModTheSpireCompatibility.resolveLaunchConfig(
                 gameRootDir = gameRootDir,
