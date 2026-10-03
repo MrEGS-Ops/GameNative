@@ -633,6 +633,14 @@ object PrefManager {
             setPref(DOOM_RENDERER_MODE, value)
         }
 
+    private val DOOM_PROFILE_ISOLATION_NEXT_LAUNCH =
+        booleanPreferencesKey("doom_profile_isolation_next_launch")
+    var doomProfileIsolationNextLaunch: Boolean
+        get() = getPref(DOOM_PROFILE_ISOLATION_NEXT_LAUNCH, false)
+        set(value) {
+            setPref(DOOM_PROFILE_ISOLATION_NEXT_LAUNCH, value)
+        }
+
     private val SUSPEND_POLICY = stringPreferencesKey("suspend_policy")
     var suspendPolicy: String
         get() = Container.normalizeSuspendPolicy(getPref(SUSPEND_POLICY, Container.SUSPEND_POLICY_MANUAL))
