@@ -4022,12 +4022,22 @@ private fun setupXEnvironment(
     val enableBox86Logs = WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)
     val wineDebugChannels = PrefManager.wineDebugChannels
     if (isDoom) {
-        DoomDiagnostics.start(context, appId)
-        DoomDiagnostics.event("DOOM launch requested")
-        DoomDiagnostics.event("WineDebugEnabled=$enableWineDebug")
-        DoomDiagnostics.event("WineDebugChannels=$wineDebugChannels")
-        DoomDiagnostics.event("DebugRun=$debugRun")
-        DoomDiagnostics.event("DiagnosticsMode=$diagnostics")
+        // Normal DOOM launches must stay genuinely lightweight. 1.0.6 started the
+        // diagnostics sampler + system logcat on every launch, even when Diagnostics
+        // Mode was off; on Quest that adds continuous /proc scans, audit traffic and
+        // file I/O while DOOM is already close to the device memory limit.
+        val doomDiagnosticsEnabled =
+            diagnostics || debugRun || enableWineDebug || enableBox86Logs
+        if (doomDiagnosticsEnabled) {
+            DoomDiagnostics.start(context, appId)
+            DoomDiagnostics.event("DOOM launch requested")
+            DoomDiagnostics.event("WineDebugEnabled=$enableWineDebug")
+            DoomDiagnostics.event("WineDebugChannels=$wineDebugChannels")
+            DoomDiagnostics.event("DebugRun=$debugRun")
+            DoomDiagnostics.event("DiagnosticsMode=$diagnostics")
+        } else {
+            DoomDiagnostics.stop("normal-launch-no-diagnostics")
+        }
 
         val staleProfileRestore = DoomProfileIsolation.restoreIfNeeded(container.rootDir)
         if (staleProfileRestore.changed) {
