@@ -27,7 +27,7 @@ object DoomProfileIsolation {
         return restoreIfNeeded(containerRoot)
     }
 
-    private fun profileCandidates(containerRoot: File): List<File> {
+    private fun steamUserDirs(containerRoot: File): List<File> {
         val usersRoot = File(containerRoot, ".wine/drive_c/users")
         return usersRoot.listFiles()
             ?.filter { it.isDirectory }
@@ -36,22 +36,18 @@ object DoomProfileIsolation {
                     windowsUser,
                     "Saved Games/id Software/DOOM/base/savegame.user",
                 )
-                saveUsers.listFiles()
-                    ?.filter { it.isDirectory }
-                    ?.map { steamUser -> File(steamUser, "PROFILE") }
-                    ?: emptyList()
+                saveUsers.listFiles()?.filter { it.isDirectory } ?: emptyList()
             }
             ?: emptyList()
     }
 
-    private fun strandedBackups(containerRoot: File): List<File> {
-        val usersRoot = File(containerRoot, ".wine/drive_c/users")
-        if (!usersRoot.isDirectory) return emptyList()
-        return usersRoot.walkTopDown()
-            .maxDepth(10)
-            .filter { it.isDirectory && it.name == ORIGINAL_BACKUP_NAME }
-            .toList()
-    }
+    private fun profileCandidates(containerRoot: File): List<File> =
+        steamUserDirs(containerRoot).map { File(it, "PROFILE") }
+
+    private fun strandedBackups(containerRoot: File): List<File> =
+        steamUserDirs(containerRoot)
+            .map { File(it, ORIGINAL_BACKUP_NAME) }
+            .filter { it.isDirectory }
 
     private fun publicBackupRoot(label: String): File =
         File(
