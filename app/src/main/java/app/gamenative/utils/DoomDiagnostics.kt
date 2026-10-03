@@ -36,6 +36,9 @@ object DoomDiagnostics {
     private var sampler: Job? = null
     private var currentFile: File? = null
     private var logcatProcess: java.lang.Process? = null
+    private var minAvailableMemBytes: Long = Long.MAX_VALUE
+    private var peakWineRssBytes: Long = 0L
+    private var highestPressureBand: Int = 0
 
     private fun stamp(): String =
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
@@ -61,6 +64,9 @@ object DoomDiagnostics {
         current.delete()
         currentFile = current
         writer = BufferedWriter(FileWriter(current, false))
+        minAvailableMemBytes = Long.MAX_VALUE
+        peakWineRssBytes = 0L
+        highestPressureBand = 0
 
         startSystemLogcat(dir)
 
@@ -107,6 +113,27 @@ object DoomDiagnostics {
 
             val wineProcesses = WineProcessSnapshotHelper.readFromProc()
             val wineRss = wineProcesses.sumOf { it.memoryUsage }
+
+            minAvailableMemBytes = minOf(minAvailableMemBytes, systemMemory.availMem)
+            peakWineRssBytes = maxOf(peakWineRssBytes, wineRss)
+
+            val availableMb = systemMemory.availMem / MB
+            val pressureBand = when {
+                availableMb <= 256 -> 5
+                availableMb <= 384 -> 4
+                availableMb <= 512 -> 3
+                availableMb <= 768 -> 2
+                availableMb <= 1024 -> 1
+                else -> 0
+            }
+            if (pressureBand > highestPressureBand) {
+                highestPressureBand = pressureBand
+                event(
+                    "MEMORY_PRESSURE band=$pressureBand available=${availableMb}MB " +
+                        "threshold=${systemMemory.threshold / MB}MB lowMemory=${systemMemory.lowMemory}",
+                )
+            }
+
             val topWine = wineProcesses
                 .sortedByDescending { it.memoryUsage }
                 .take(6)
@@ -152,6 +179,12 @@ object DoomDiagnostics {
         synchronized(lock) {
             runCatching {
                 writer?.apply {
+                    val minAvailable =
+                        if (minAvailableMemBytes == Long.MAX_VALUE) -1L else minAvailableMemBytes / MB
+                    write(
+                        "${stamp()}  MEM SUMMARY minAvailable=${minAvailable}MB " +
+                            "peakWineRss=${peakWineRssBytes / MB}MB pressureBand=$highestPressureBand\n",
+                    )
                     write("${stamp()}  ===== SESSION END: $reason =====\n")
                     flush()
                     close()
